@@ -16,10 +16,10 @@ type Config = {
 }
 
 const GAMES = [
-  { id: 'blackjack', label: 'BLACKJACK', desc: 'Beat the dealer. 1.5x on blackjack.', icon: '🃏', configKey: 'blackjack_open' },
-  { id: 'roulette',  label: 'ROULETTE',  desc: 'European single zero. Place your bets.', icon: '🎡', configKey: 'roulette_open' },
-  { id: 'slots',     label: 'SLOTS',     desc: 'Three reels. Vault-Tec symbols.', icon: '🎰', configKey: 'slots_open' },
-  { id: 'poker',     label: 'VIDEO POKER', desc: '5-card draw. Jacks or better.', icon: '♠️', configKey: 'poker_open' },
+  { id: 'blackjack', label: 'BLACKJACK',    desc: 'Beat the dealer. 1.5x on blackjack.', icon: '🃏', configKey: 'blackjack_open' },
+  { id: 'roulette',  label: 'ROULETTE',     desc: 'European single zero. Place your bets.', icon: '🎡', configKey: 'roulette_open' },
+  { id: 'slots',     label: 'SLOTS',        desc: 'Three reels. Weighted symbols.', icon: '🎰', configKey: 'slots_open' },
+  { id: 'poker',     label: 'VIDEO POKER',  desc: '5-card draw. Jacks or better.', icon: '♠️', configKey: 'poker_open' },
 ]
 
 export default function LobbyPage() {
@@ -109,6 +109,11 @@ export default function LobbyPage() {
                 </button>
               </Link>
             )}
+            <Link href="/profile">
+              <button className="btn" style={{ padding: '0.4rem 1rem', fontSize: '0.75rem' }}>
+                [ PROFILE ]
+              </button>
+            </Link>
             <button className="btn" onClick={handleSignOut}
               style={{ padding: '0.4rem 1rem', fontSize: '0.75rem' }}>
               [ SIGN OUT ]
