@@ -1,26 +1,191 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --gold:        #C9A84C;
+  --gold-bright: #FFD700;
+  --gold-dim:    #7A6230;
+  --red:         #8B0000;
+  --red-bright:  #CC0000;
+  --green-felt:  #1A3A2A;
+  --black:       #0A0800;
+  --black-soft:  #110E08;
+  --white:       #F5E6C8;
+  --white-dim:   #A89060;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html, body {
+  background-color: var(--black);
+  color: var(--white);
+  font-family: 'Share Tech Mono', 'Courier New', monospace;
+  min-height: 100vh;
+  overflow-x: hidden;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ── SCANLINES ── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── CRT VIGNETTE ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.7) 100%);
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--black); }
+::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
+/* ── TYPOGRAPHY ── */
+h1, h2, h3, h4 {
+  font-family: 'VT323', 'Share Tech Mono', monospace;
+  color: var(--gold);
+  letter-spacing: 0.05em;
+}
+
+a {
+  color: var(--gold);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+a:hover { color: var(--gold-bright); }
+
+/* ── PANELS ── */
+.panel {
+  background: var(--black-soft);
+  border: 1px solid var(--gold-dim);
+  padding: 1.5rem;
+  position: relative;
+}
+
+.panel::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(201, 168, 76, 0.15);
+  pointer-events: none;
+}
+
+/* ── BUTTONS ── */
+.btn {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+  padding: 0.6rem 1.5rem;
+  border: 1px solid var(--gold);
+  background: transparent;
+  color: var(--gold);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+}
+
+.btn:hover {
+  background: var(--gold);
+  color: var(--black);
+}
+
+.btn-primary {
+  background: var(--gold);
+  color: var(--black);
+  font-weight: bold;
+}
+
+.btn-primary:hover {
+  background: var(--gold-bright);
+  border-color: var(--gold-bright);
+}
+
+.btn-danger {
+  border-color: var(--red-bright);
+  color: var(--red-bright);
+}
+
+.btn-danger:hover {
+  background: var(--red-bright);
+  color: var(--white);
+}
+
+/* ── INPUTS ── */
+.input {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.9rem;
+  background: var(--black);
+  border: 1px solid var(--gold-dim);
+  color: var(--white);
+  padding: 0.6rem 1rem;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 8px rgba(201, 168, 76, 0.3);
+}
+
+.input::placeholder {
+  color: var(--white-dim);
+  opacity: 0.5;
+}
+
+/* ── ART DECO DIVIDER ── */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  color: var(--gold-dim);
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+}
+
+/* ── GOLD GLOW ── */
+.glow {
+  text-shadow: 0 0 10px rgba(201, 168, 76, 0.8),
+               0 0 20px rgba(201, 168, 76, 0.4),
+               0 0 40px rgba(201, 168, 76, 0.2);
+}
+
+/* ── CAPS BADGE ── */
+.caps-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(201, 168, 76, 0.1);
+  border: 1px solid var(--gold-dim);
+  color: var(--gold);
+  padding: 0.3rem 0.8rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
 }
