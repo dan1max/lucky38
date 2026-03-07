@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { VT323, Share_Tech_Mono } from 'next/font/google'
 import './globals.css'
 import BroadcastListener from '@/components/BroadcastListener'
+import { ConfigProvider } from '@/lib/config-context'
 
 const vt323 = VT323({
   weight: '400',
@@ -24,8 +25,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${vt323.variable} ${shareTechMono.variable}`}>
-        {children}
-        <BroadcastListener />
+        <ConfigProvider>
+          {children}
+          <BroadcastListener />
+        </ConfigProvider>
       </body>
     </html>
   )

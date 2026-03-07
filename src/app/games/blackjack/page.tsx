@@ -4,50 +4,24 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import GameGuard from '@/components/GameGuard'
 
-type GameState = {
-  status: 'idle' | 'playing' | 'win' | 'loss' | 'bust' | 'push' | 'blackjack'
-  playerHand: string[]
-  dealerHand: string[]
-  dealerHandReal: string[]
-  deck: string[]
-  playerTotal: number
-  dealerTotal: number
-  bet: number
-  payout: number
-  message: string
-}
-
-const INIT: GameState = {
-  status: 'idle', playerHand: [], dealerHand: [], dealerHandReal: [],
-  deck: [], playerTotal: 0, dealerTotal: 0, bet: 0, payout: 0, message: ''
-}
-
-function CardDisplay({ card }: { card: string }) {
-  const isHidden = card === '??'
-  const isRed = card.endsWith('♥') || card.endsWith('♦')
-  return (
-    <div style={{
-      width: '60px', height: '90px',
-      background: isHidden ? 'var(--gold-dim)' : 'var(--white)',
-      border: '2px solid var(--gold)', borderRadius: '6px',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: isHidden ? '1.5rem' : '1.2rem', fontWeight: 'bold',
-      color: isHidden ? 'var(--black)' : isRed ? '#CC0000' : '#111',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
-      flexShrink: 0,
-    }}>
-      {isHidden ? '?' : card}
-    </div>
-  )
-}
+type GameStatus = 'idle' | 'playing' | 'bust' | 'win' | 'loss' | 'push' | 'blackjack'
 
 export default function BlackjackPage() {
   const [balance, setBalance] = useState(0)
   const [betInput, setBetInput] = useState('50')
-  const [game, setGame] = useState<GameState>(INIT)
+  const [status, setStatus] = useState<GameStatus>('idle')
+  const [playerHand, setPlayerHand] = useState<string[]>([])
+  const [dealerHand, setDealerHand] = useState<string[]>([])
+  const [dealerHandReal, setDealerHandReal] = useState<string[]>([])
+  const [deck, setDeck] = useState<string[]>([])
+  const [playerTotal, setPlayerTotal] = useState(0)
+  const [dealerTotal, setDealerTotal] = useState(0)
+  const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [currentBet, setCurrentBet] = useState(0)
   const router = useRouter()
   const supabase = createClient()
 
@@ -61,211 +35,234 @@ export default function BlackjackPage() {
     load()
   }, [])
 
-  async function callAPI(action: string, extra: object = {}) {
-    setLoading(true)
-    setError('')
+  const isOver = ['bust','win','loss','push','blackjack'].includes(status)
+  const visibleDealerHand = isOver ? dealerHandReal : dealerHand
+
+  async function callApi(body: object) {
     const res = await fetch('/api/games/blackjack', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, ...extra })
+      body: JSON.stringify(body)
     })
-    const data = await res.json()
-    setLoading(false)
-    if (!res.ok) { setError(data.error || 'ERROR'); return null }
-    return data
+    return { res, data: await res.json() }
   }
 
   async function handleDeal() {
     const bet = parseInt(betInput)
     if (isNaN(bet) || bet < 10) { setError('MINIMUM BET IS 10 CAPS'); return }
     if (bet > balance) { setError('INSUFFICIENT CAPS'); return }
-    const data = await callAPI('deal', { bet })
-    if (!data) return
+    setError(''); setLoading(true); setMessage('')
+
+    const { res, data } = await callApi({ action: 'deal', bet })
+    setLoading(false)
+    if (!res.ok) { setError(data.error || 'ERROR'); return }
+
+    setCurrentBet(bet)
     setBalance(data.newBalance)
-    setGame({
-      status: data.status,
-      playerHand: data.playerHand,
-      dealerHandReal: data.dealerHand,
-      dealerHand: [data.dealerHand[0], '??'],
-      deck: data.deck || [],
-      playerTotal: data.playerTotal,
-      dealerTotal: data.dealerTotal,
-      bet,
-      payout: data.payout || 0,
-      message: data.message || '',
-    })
+    setDeck(data.deck)
+
+    if (data.status === 'blackjack') {
+      setPlayerHand(data.playerHand)
+      setDealerHand(data.dealerHand)
+      setDealerHandReal(data.dealerHand)
+      setPlayerTotal(data.playerTotal)
+      setDealerTotal(data.dealerTotal)
+      setBalance(data.newBalance)
+      setMessage(data.message)
+      setStatus('blackjack')
+      return
+    }
+
+    setPlayerHand(data.playerHand)
+    setDealerHandReal(data.dealerHand)
+    setDealerHand([data.dealerHand[0], '??'])
+    setPlayerTotal(data.playerTotal)
+    setDealerTotal(data.dealerTotal)
+    setStatus('playing')
   }
 
   async function handleAction(action: 'hit' | 'stand' | 'double') {
-    const data = await callAPI(action, {
-      state: {
-        playerHand: game.playerHand,
-        dealerHand: game.dealerHandReal,
-        deck: game.deck,
-        bet: game.bet
-      }
+    setLoading(true); setError('')
+    const { res, data } = await callApi({
+      action,
+      state: { playerHand, dealerHand: dealerHandReal, deck, bet: currentBet }
     })
-    if (!data) return
-    if (data.newBalance !== undefined) setBalance(data.newBalance)
-    const isStillPlaying = data.status === 'playing'
-    setGame({
-      status: data.status,
-      playerHand: data.playerHand,
-      dealerHandReal: data.dealerHand,
-      dealerHand: isStillPlaying ? [data.dealerHand[0], '??'] : data.dealerHand,
-      deck: data.deck || game.deck,
-      playerTotal: data.playerTotal,
-      dealerTotal: data.dealerTotal,
-      bet: action === 'double' ? game.bet * 2 : game.bet,
-      payout: data.payout || 0,
-      message: data.message || '',
-    })
+    setLoading(false)
+    if (!res.ok) { setError(data.error || 'ERROR'); return }
+
+    setPlayerHand(data.playerHand)
+    setPlayerTotal(data.playerTotal)
+    setDealerHandReal(data.dealerHand)
+    setDealerTotal(data.dealerTotal)
+
+    if (data.status === 'playing') {
+      setDealerHand([data.dealerHand[0], '??'])
+      setDeck(prev => prev.slice(0, -1))
+    } else {
+      setDealerHand(data.dealerHand)
+      setBalance(data.newBalance)
+      setMessage(data.message)
+      setStatus(data.status)
+    }
   }
 
-  const isPlaying = game.status === 'playing'
-  const isOver = ['win', 'loss', 'bust', 'push', 'blackjack'].includes(game.status)
-  const statusColor = {
-    win: 'var(--gold)', blackjack: 'var(--gold-bright)',
-    loss: 'var(--red-bright)', bust: 'var(--red-bright)',
-    push: 'var(--white-dim)', idle: 'transparent', playing: 'transparent'
-  }[game.status]
+  const statusColor = () => {
+    if (['win','blackjack'].includes(status)) return 'var(--gold)'
+    if (status === 'push') return 'var(--white-dim)'
+    return 'var(--red-bright)'
+  }
 
-  const visibleDealerHand = isOver ? game.dealerHandReal : game.dealerHand
+  function HandDisplay({ cards, label, total }: { cards: string[]; label: string; total: number }) {
+    return (
+      <div style={{ textAlign: 'center' }}>
+        <p style={{ color: 'var(--gold-dim)', fontSize: '0.7rem', letterSpacing: '0.2em',
+          marginBottom: '0.75rem' }}>{label} {total > 0 ? `· ${total}` : ''}</p>
+        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+          {cards.map((card, i) => {
+            const isRed = card.endsWith('♥') || card.endsWith('♦')
+            const isHidden = card === '??'
+            return (
+              <div key={i} style={{
+                width: '55px', height: '80px',
+                background: isHidden ? 'var(--gold-dim)' : 'var(--white)',
+                border: '2px solid var(--gold-dim)', borderRadius: '5px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1rem', fontWeight: 'bold',
+                color: isHidden ? 'transparent' : isRed ? '#CC0000' : '#111',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                flexShrink: 0,
+              }}>
+                {isHidden ? '?' : card}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <main style={{ minHeight: '100vh', background: 'var(--black)', padding: '2rem' }}>
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: '4px',
-        background: 'linear-gradient(90deg, transparent, var(--gold), transparent)' }} />
+    <GameGuard gameKey="blackjack_open">
+      <main style={{ minHeight: '100vh', background: 'var(--black)', padding: '2rem' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: '4px',
+          background: 'linear-gradient(90deg, transparent, var(--gold), transparent)' }} />
 
-      <div style={{ maxWidth: '700px', margin: '0 auto' }}>
+        <div style={{ maxWidth: '700px', margin: '0 auto' }}>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
-          <div>
-            <h1 style={{ fontSize: '2.5rem', color: 'var(--gold)' }}>BLACKJACK</h1>
-            <p style={{ color: 'var(--gold-dim)', fontSize: '0.75rem', letterSpacing: '0.2em' }}>
-              LUCKY 38 · NEW VEGAS
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <span className="caps-badge">💰 {balance.toLocaleString()} CAPS</span>
-            <Link href="/lobby">
-              <button className="btn" style={{ padding: '0.4rem 1rem', fontSize: '0.75rem' }}>
-                ← LOBBY
-              </button>
-            </Link>
-          </div>
-        </div>
-
-        <div className="panel" style={{ background: 'var(--green-felt)', marginBottom: '1.5rem',
-          minHeight: '340px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
-          <div>
-            <p style={{ color: 'var(--gold-dim)', fontSize: '0.7rem', letterSpacing: '0.2em',
-              marginBottom: '0.75rem' }}>
-              DEALER — {isPlaying ? `SHOWING ${game.dealerTotal}` : game.dealerTotal ? `TOTAL: ${game.dealerTotal}` : ''}
-            </p>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {visibleDealerHand.length > 0
-                ? visibleDealerHand.map((c, i) => <CardDisplay key={i} card={c} />)
-                : <p style={{ color: 'var(--gold-dim)', fontSize: '0.8rem' }}>—</p>}
-            </div>
-          </div>
-
-          {game.message && (
-            <div style={{ textAlign: 'center', padding: '0.75rem',
-              border: `1px solid ${statusColor}`, background: 'rgba(0,0,0,0.4)' }}>
-              <p style={{ color: statusColor, fontSize: '1.2rem', letterSpacing: '0.2em' }}>
-                {game.message}
+          <div style={{ display: 'flex', justifyContent: 'space-between',
+            alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+            <div>
+              <h1 style={{ fontSize: '2.5rem', color: 'var(--gold)' }}>BLACKJACK</h1>
+              <p style={{ color: 'var(--gold-dim)', fontSize: '0.75rem', letterSpacing: '0.2em' }}>
+                DEALER STANDS ON 17 · BLACKJACK PAYS 2.5X
               </p>
-              {isOver && game.payout > 0 && (
-                <p style={{ color: 'var(--gold-dim)', fontSize: '0.8rem', marginTop: '0.3rem' }}>
-                  PAYOUT: {game.payout.toLocaleString()} CAPS
-                </p>
-              )}
             </div>
-          )}
-
-          <div>
-            <p style={{ color: 'var(--gold-dim)', fontSize: '0.7rem', letterSpacing: '0.2em',
-              marginBottom: '0.75rem' }}>
-              YOUR HAND — TOTAL: {game.playerTotal || '—'}
-            </p>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {game.playerHand.length > 0
-                ? game.playerHand.map((c, i) => <CardDisplay key={i} card={c} />)
-                : <p style={{ color: 'var(--gold-dim)', fontSize: '0.8rem' }}>—</p>}
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+              <span className="caps-badge">💰 {balance.toLocaleString()} CAPS</span>
+              <Link href="/lobby">
+                <button className="btn" style={{ padding: '0.4rem 1rem', fontSize: '0.75rem' }}>
+                  ← LOBBY
+                </button>
+              </Link>
             </div>
           </div>
-        </div>
 
-        {error && (
-          <p style={{ color: 'var(--red-bright)', fontSize: '0.85rem',
-            letterSpacing: '0.1em', marginBottom: '1rem' }}>
-            &gt; {error}
-          </p>
-        )}
+          {/* Table */}
+          <div className="panel" style={{ background: 'var(--green-felt)',
+            marginBottom: '1.5rem', minHeight: '280px' }}>
 
-        <div className="panel">
-          {!isPlaying && (
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end',
-              flexWrap: 'wrap', marginBottom: '1rem' }}>
-              <div style={{ flex: 1, minWidth: '120px' }}>
-                <label style={{ color: 'var(--gold-dim)', fontSize: '0.75rem',
-                  letterSpacing: '0.2em', display: 'block', marginBottom: '0.4rem' }}>
-                  BET (CAPS)
-                </label>
-                <input className="input" type="number" min="10" max={balance}
-                  value={betInput} onChange={e => setBetInput(e.target.value)} />
+            {message && (
+              <div style={{ textAlign: 'center', padding: '0.75rem',
+                border: `1px solid ${statusColor()}`,
+                background: 'rgba(0,0,0,0.4)', marginBottom: '1.5rem' }}>
+                <p style={{ color: statusColor(), fontSize: '1.1rem', letterSpacing: '0.2em' }}>
+                  {message}
+                </p>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                {[10, 25, 50, 100, 250].map(v => (
-                  <button key={v} className="btn"
-                    style={{ padding: '0.4rem 0.7rem', fontSize: '0.75rem' }}
-                    onClick={() => setBetInput(String(v))}>
-                    {v}
-                  </button>
-                ))}
+            )}
+
+            {dealerHand.length > 0 && (
+              <div style={{ marginBottom: '2rem' }}>
+                <HandDisplay cards={visibleDealerHand} label="DEALER"
+                  total={isOver ? dealerTotal : dealerHandReal[0] ? dealerTotal : 0} />
               </div>
-            </div>
+            )}
+
+            {playerHand.length > 0 && (
+              <HandDisplay cards={playerHand} label="YOU" total={playerTotal} />
+            )}
+
+            {playerHand.length === 0 && (
+              <p style={{ textAlign: 'center', color: 'var(--gold-dim)',
+                fontSize: '0.85rem', letterSpacing: '0.2em', marginTop: '3rem' }}>
+                PLACE YOUR BET AND DEAL
+              </p>
+            )}
+          </div>
+
+          {error && (
+            <p style={{ color: 'var(--red-bright)', fontSize: '0.85rem',
+              letterSpacing: '0.1em', marginBottom: '1rem' }}>
+              &gt; {error}
+            </p>
           )}
 
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            {!isPlaying && (
-              <button className="btn btn-primary" onClick={handleDeal}
-                disabled={loading} style={{ flex: 1 }}>
-                {loading ? '[ DEALING... ]' : isOver ? '[ DEAL AGAIN ]' : '[ DEAL ]'}
-              </button>
+          {/* Controls */}
+          <div className="panel">
+            {status !== 'playing' && (
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end',
+                flexWrap: 'wrap', marginBottom: '1rem' }}>
+                <div style={{ flex: 1, minWidth: '120px' }}>
+                  <label style={{ color: 'var(--gold-dim)', fontSize: '0.75rem',
+                    letterSpacing: '0.2em', display: 'block', marginBottom: '0.4rem' }}>
+                    BET (CAPS)
+                  </label>
+                  <input className="input" type="number" min="10" max={balance}
+                    value={betInput} onChange={e => setBetInput(e.target.value)} />
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {[10, 25, 50, 100, 250].map(v => (
+                    <button key={v} className="btn"
+                      style={{ padding: '0.4rem 0.7rem', fontSize: '0.75rem' }}
+                      onClick={() => setBetInput(String(v))}>
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
-            {isPlaying && (
-              <>
-                <button className="btn btn-primary" onClick={() => handleAction('hit')}
+
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {status !== 'playing' && (
+                <button className="btn btn-primary" onClick={handleDeal}
                   disabled={loading} style={{ flex: 1 }}>
-                  [ HIT ]
+                  {loading ? '[ DEALING... ]' : isOver ? '[ DEAL AGAIN ]' : '[ DEAL ]'}
                 </button>
-                <button className="btn" onClick={() => handleAction('stand')}
-                  disabled={loading} style={{ flex: 1 }}>
-                  [ STAND ]
-                </button>
-                {game.playerHand.length === 2 && balance >= game.bet && (
-                  <button className="btn" onClick={() => handleAction('double')}
+              )}
+              {status === 'playing' && (
+                <>
+                  <button className="btn btn-primary" onClick={() => handleAction('hit')}
                     disabled={loading} style={{ flex: 1 }}>
+                    {loading ? '...' : '[ HIT ]'}
+                  </button>
+                  <button className="btn" onClick={() => handleAction('stand')}
+                    disabled={loading} style={{ flex: 1 }}>
+                    [ STAND ]
+                  </button>
+                  <button className="btn" onClick={() => handleAction('double')}
+                    disabled={loading || playerHand.length !== 2} style={{ flex: 1 }}>
                     [ DOUBLE ]
                   </button>
-                )}
-              </>
-            )}
+                </>
+              )}
+            </div>
           </div>
+
         </div>
 
-        <div style={{ marginTop: '1rem', color: 'var(--gold-dim)',
-          fontSize: '0.7rem', letterSpacing: '0.1em', textAlign: 'center' }}>
-          DEALER STANDS ON 17 · BLACKJACK PAYS 2.5x · MINIMUM BET 10 CAPS
-        </div>
-
-      </div>
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: '4px',
-        background: 'linear-gradient(90deg, transparent, var(--gold), transparent)' }} />
-    </main>
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: '4px',
+          background: 'linear-gradient(90deg, transparent, var(--gold), transparent)' }} />
+      </main>
+    </GameGuard>
   )
 }
