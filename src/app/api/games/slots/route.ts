@@ -1,31 +1,40 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-const SYMBOLS = ['🍒', '🔔', '⭐', '💎', '7️⃣', '🎰']
+const REEL: string[] = [
+  '🍒','🍒','🍒','🍒','🍒','🍒',
+  '🔔','🔔','🔔','🔔',
+  '⭐','⭐','⭐',
+  '💎','💎',
+  '7️⃣',
+  '🎰',
+]
 
 const PAYOUTS: Record<string, number> = {
-  '🍒🍒🍒': 2,
-  '🔔🔔🔔': 3,
-  '⭐⭐⭐': 5,
-  '💎💎💎': 10,
-  '7️⃣7️⃣7️⃣': 20,
-  '🎰🎰🎰': 50,
+  '🍒🍒🍒': 6,
+  '🔔🔔🔔': 9,
+  '⭐⭐⭐':  16,
+  '💎💎💎':  32,
+  '7️⃣7️⃣7️⃣': 75,
+  '🎰🎰🎰': 160,
 }
 
-const PARTIAL_PAYOUTS: Record<string, number> = {
-  '🍒🍒': 1,
+function spinReel(): string {
+  return REEL[Math.floor(Math.random() * REEL.length)]
 }
 
 function spin(): string[] {
-  return [0, 1, 2].map(() => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)])
+  return [spinReel(), spinReel(), spinReel()]
 }
 
 function calculatePayout(reels: string[], bet: number): { multiplier: number; label: string } {
   const key = reels.join('')
-  if (PAYOUTS[key]) return { multiplier: PAYOUTS[key], label: `${reels[0]} ${reels[1]} ${reels[2]}` }
+  if (PAYOUTS[key]) return { multiplier: PAYOUTS[key], label: key }
 
-  const partial = reels.slice(0, 2).join('')
-  if (PARTIAL_PAYOUTS[partial]) return { multiplier: PARTIAL_PAYOUTS[partial], label: 'PARTIAL MATCH' }
+  // Two cherries (first two reels, third is NOT cherry)
+  if (reels[0] === '🍒' && reels[1] === '🍒' && reels[2] !== '🍒') {
+    return { multiplier: 3, label: 'TWO CHERRIES' }
+  }
 
   return { multiplier: 0, label: 'NO MATCH' }
 }

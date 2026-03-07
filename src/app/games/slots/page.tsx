@@ -8,13 +8,13 @@ import Link from 'next/link'
 const SYMBOLS = ['🍒', '🔔', '⭐', '💎', '7️⃣', '🎰']
 
 const PAYTABLE = [
-  { combo: '🎰 🎰 🎰', mult: 50, label: 'JACKPOT' },
-  { combo: '7️⃣ 7️⃣ 7️⃣', mult: 20, label: 'LUCKY SEVENS' },
-  { combo: '💎 💎 💎', mult: 10, label: 'DIAMONDS' },
-  { combo: '⭐ ⭐ ⭐', mult: 5,  label: 'STARS' },
-  { combo: '🔔 🔔 🔔', mult: 3,  label: 'BELLS' },
-  { combo: '🍒 🍒 🍒', mult: 2,  label: 'CHERRIES' },
-  { combo: '🍒 🍒 —',  mult: 1,  label: 'TWO CHERRIES' },
+  { combo: '🎰 🎰 🎰', mult: 160, label: 'JACKPOT' },
+  { combo: '7️⃣ 7️⃣ 7️⃣', mult: 75,  label: 'LUCKY SEVENS' },
+  { combo: '💎 💎 💎', mult: 32,  label: 'DIAMONDS' },
+  { combo: '⭐ ⭐ ⭐', mult: 16,  label: 'STARS' },
+  { combo: '🔔 🔔 🔔', mult: 9,   label: 'BELLS' },
+  { combo: '🍒 🍒 🍒', mult: 6,   label: 'CHERRIES' },
+  { combo: '🍒 🍒 —',  mult: 3,   label: 'TWO CHERRIES' },
 ]
 
 export default function SlotsPage() {
@@ -52,11 +52,9 @@ export default function SlotsPage() {
     setSpinning(true)
     pendingResult.current = null
 
-    // Start animation
     let ticks = 0
     spinInterval.current = setInterval(() => {
       ticks++
-      // On the last tick, snap to the real result if we have it
       if (ticks >= 16) {
         if (spinInterval.current) clearInterval(spinInterval.current)
         spinInterval.current = null
@@ -77,7 +75,6 @@ export default function SlotsPage() {
       ])
     }, 80)
 
-    // Fire API call — store result in ref, animation will pick it up
     const res = await fetch('/api/games/slots', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -92,14 +89,12 @@ export default function SlotsPage() {
       return
     }
 
-    // If animation already finished, apply immediately
     if (!spinInterval.current) {
       setDisplayReels(data.reels)
       setBalance(data.newBalance)
       setResult({ outcome: data.outcome, payout: data.payout, multiplier: data.multiplier, label: data.label })
       setSpinning(false)
     } else {
-      // Otherwise store it — the interval's last tick will apply it
       pendingResult.current = data
     }
   }
@@ -132,10 +127,7 @@ export default function SlotsPage() {
         </div>
 
         <div className="panel" style={{ textAlign: 'center', marginBottom: '1.5rem', padding: '2rem' }}>
-          <div style={{
-            display: 'flex', justifyContent: 'center', gap: '1rem',
-            marginBottom: '1.5rem',
-          }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
             {displayReels.map((symbol, i) => (
               <div key={i} style={{
                 width: '100px', height: '100px',
@@ -204,9 +196,13 @@ export default function SlotsPage() {
         </div>
 
         <div className="panel">
-          <h3 style={{ fontSize: '1rem', marginBottom: '1rem', letterSpacing: '0.2em' }}>
+          <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', letterSpacing: '0.2em' }}>
             PAYTABLE
           </h3>
+          <p style={{ color: 'var(--gold-dim)', fontSize: '0.7rem', letterSpacing: '0.15em',
+            marginBottom: '1rem' }}>
+            RTP ~81% · WEIGHTED REELS · 🍒 MOST COMMON · 🎰 RAREST
+          </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {PAYTABLE.map((row, i) => (
               <div key={i} style={{
