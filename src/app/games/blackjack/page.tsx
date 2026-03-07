@@ -83,11 +83,16 @@ export default function BlackjackPage() {
     if (!data) return
     setBalance(data.newBalance)
     setGame({
-      ...data,
-      bet,
-      deck: data.deck || [],
+      status: data.status,
+      playerHand: data.playerHand,
       dealerHandReal: data.dealerHand,
       dealerHand: [data.dealerHand[0], '??'],
+      deck: data.deck || [],
+      playerTotal: data.playerTotal,
+      dealerTotal: data.dealerTotal,
+      bet,
+      payout: data.payout || 0,
+      message: data.message || '',
     })
   }
 
@@ -102,15 +107,19 @@ export default function BlackjackPage() {
     })
     if (!data) return
     if (data.newBalance !== undefined) setBalance(data.newBalance)
-    setGame(prev => ({
-      ...prev, ...data,
-      bet: action === 'double' ? prev.bet * 2 : prev.bet,
-      deck: data.deck || prev.deck,
+    const isStillPlaying = data.status === 'playing'
+    setGame({
+      status: data.status,
+      playerHand: data.playerHand,
       dealerHandReal: data.dealerHand,
-      dealerHand: data.status === 'playing'
-        ? [data.dealerHand[0], '??']
-        : data.dealerHand,
-    }))
+      dealerHand: isStillPlaying ? [data.dealerHand[0], '??'] : data.dealerHand,
+      deck: data.deck || game.deck,
+      playerTotal: data.playerTotal,
+      dealerTotal: data.dealerTotal,
+      bet: action === 'double' ? game.bet * 2 : game.bet,
+      payout: data.payout || 0,
+      message: data.message || '',
+    })
   }
 
   const isPlaying = game.status === 'playing'
@@ -120,6 +129,8 @@ export default function BlackjackPage() {
     loss: 'var(--red-bright)', bust: 'var(--red-bright)',
     push: 'var(--white-dim)', idle: 'transparent', playing: 'transparent'
   }[game.status]
+
+  const visibleDealerHand = isOver ? game.dealerHandReal : game.dealerHand
 
   return (
     <main style={{ minHeight: '100vh', background: 'var(--black)', padding: '2rem' }}>
@@ -152,13 +163,11 @@ export default function BlackjackPage() {
           <div>
             <p style={{ color: 'var(--gold-dim)', fontSize: '0.7rem', letterSpacing: '0.2em',
               marginBottom: '0.75rem' }}>
-              DEALER — {game.status === 'playing'
-                ? `SHOWING ${game.dealerTotal}`
-                : game.dealerTotal ? `TOTAL: ${game.dealerTotal}` : ''}
+              DEALER — {isPlaying ? `SHOWING ${game.dealerTotal}` : game.dealerTotal ? `TOTAL: ${game.dealerTotal}` : ''}
             </p>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {game.dealerHand.length > 0
-                ? game.dealerHand.map((c, i) => <CardDisplay key={i} card={c} />)
+              {visibleDealerHand.length > 0
+                ? visibleDealerHand.map((c, i) => <CardDisplay key={i} card={c} />)
                 : <p style={{ color: 'var(--gold-dim)', fontSize: '0.8rem' }}>—</p>}
             </div>
           </div>
