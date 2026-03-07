@@ -20,14 +20,16 @@ const PAYTABLE = [
 export default function SlotsPage() {
   const [balance, setBalance] = useState(0)
   const [betInput, setBetInput] = useState('50')
-  const [reels, setReels] = useState(['🎰', '🎰', '🎰'])
-  const [spinning, setSpinning] = useState(false)
   const [displayReels, setDisplayReels] = useState(['🎰', '🎰', '🎰'])
+  const [spinning, setSpinning] = useState(false)
   const [result, setResult] = useState<{
     outcome: string, payout: number, multiplier: number, label: string
   } | null>(null)
   const [error, setError] = useState('')
+
   const spinInterval = useRef<NodeJS.Timeout | null>(null)
+  const pendingResult = useRef<any>(null)
+
   const router = useRouter()
   const supabase = createClient()
 
@@ -48,21 +50,34 @@ export default function SlotsPage() {
     setError('')
     setResult(null)
     setSpinning(true)
+    pendingResult.current = null
 
-    // Animate reels
+    // Start animation
     let ticks = 0
     spinInterval.current = setInterval(() => {
+      ticks++
+      // On the last tick, snap to the real result if we have it
+      if (ticks >= 16) {
+        if (spinInterval.current) clearInterval(spinInterval.current)
+        spinInterval.current = null
+        if (pendingResult.current) {
+          const r = pendingResult.current
+          setDisplayReels(r.reels)
+          setBalance(r.newBalance)
+          setResult({ outcome: r.outcome, payout: r.payout, multiplier: r.multiplier, label: r.label })
+          setSpinning(false)
+          pendingResult.current = null
+        }
+        return
+      }
       setDisplayReels([
         SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
         SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
         SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
       ])
-      ticks++
-      if (ticks > 15 && spinInterval.current) {
-        clearInterval(spinInterval.current)
-      }
     }, 80)
 
+    // Fire API call — store result in ref, animation will pick it up
     const res = await fetch('/api/games/slots', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -70,16 +85,23 @@ export default function SlotsPage() {
     })
     const data = await res.json()
 
-    // Wait for animation to finish then show result
-    setTimeout(() => {
+    if (!res.ok) {
       if (spinInterval.current) clearInterval(spinInterval.current)
       setSpinning(false)
-      if (!res.ok) { setError(data.error || 'ERROR'); return }
+      setError(data.error || 'ERROR')
+      return
+    }
+
+    // If animation already finished, apply immediately
+    if (!spinInterval.current) {
       setDisplayReels(data.reels)
-      setReels(data.reels)
       setBalance(data.newBalance)
       setResult({ outcome: data.outcome, payout: data.payout, multiplier: data.multiplier, label: data.label })
-    }, 1300)
+      setSpinning(false)
+    } else {
+      // Otherwise store it — the interval's last tick will apply it
+      pendingResult.current = data
+    }
   }
 
   const resultColor = result?.outcome === 'win' ? 'var(--gold)' : 'var(--red-bright)'
@@ -109,7 +131,6 @@ export default function SlotsPage() {
           </div>
         </div>
 
-        {/* Slot Machine */}
         <div className="panel" style={{ textAlign: 'center', marginBottom: '1.5rem', padding: '2rem' }}>
           <div style={{
             display: 'flex', justifyContent: 'center', gap: '1rem',
@@ -182,7 +203,6 @@ export default function SlotsPage() {
           </button>
         </div>
 
-        {/* Paytable */}
         <div className="panel">
           <h3 style={{ fontSize: '1rem', marginBottom: '1rem', letterSpacing: '0.2em' }}>
             PAYTABLE
