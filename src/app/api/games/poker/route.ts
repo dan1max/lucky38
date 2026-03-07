@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { applyBustProtection } from '@/lib/bust-protection'
 
 const SUITS = ['♠', '♥', '♦', '♣']
 const RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
@@ -22,8 +23,7 @@ function shuffle(deck: string[]): string[] {
 }
 
 function rankIndex(card: string): number {
-  const rank = card.slice(0, -1)
-  return RANKS.indexOf(rank)
+  return RANKS.indexOf(card.slice(0, -1))
 }
 
 function getRank(card: string): string { return card.slice(0, -1) }
@@ -40,26 +40,22 @@ function evaluateHand(hand: string[]): { name: string; multiplier: number } {
 
   const isFlush = suits.every(s => s === suits[0])
   const isStr8 = indices[4] - indices[0] === 4 && new Set(indices).size === 5
-  // Special case: A-2-3-4-5 straight
   const isWheelStr8 = JSON.stringify(indices) === JSON.stringify([0,1,2,3,12])
-
   const isStraight = isStr8 || isWheelStr8
   const isRoyalFlush = isFlush && JSON.stringify(indices) === JSON.stringify([8,9,10,11,12])
 
-  if (isRoyalFlush)                        return { name: 'ROYAL FLUSH',    multiplier: 800 }
-  if (isStraight && isFlush)               return { name: 'STRAIGHT FLUSH', multiplier: 50  }
-  if (counts[0] === 4)                     return { name: 'FOUR OF A KIND', multiplier: 25  }
-  if (counts[0] === 3 && counts[1] === 2)  return { name: 'FULL HOUSE',     multiplier: 9   }
-  if (isFlush)                             return { name: 'FLUSH',          multiplier: 6   }
-  if (isStraight)                          return { name: 'STRAIGHT',       multiplier: 4   }
-  if (counts[0] === 3)                     return { name: 'THREE OF A KIND',multiplier: 3   }
-  if (counts[0] === 2 && counts[1] === 2)  return { name: 'TWO PAIR',       multiplier: 2   }
+  if (isRoyalFlush)                       return { name: 'ROYAL FLUSH',     multiplier: 800 }
+  if (isStraight && isFlush)              return { name: 'STRAIGHT FLUSH',  multiplier: 50  }
+  if (counts[0] === 4)                    return { name: 'FOUR OF A KIND',  multiplier: 25  }
+  if (counts[0] === 3 && counts[1] === 2) return { name: 'FULL HOUSE',      multiplier: 9   }
+  if (isFlush)                            return { name: 'FLUSH',           multiplier: 6   }
+  if (isStraight)                         return { name: 'STRAIGHT',        multiplier: 4   }
+  if (counts[0] === 3)                    return { name: 'THREE OF A KIND', multiplier: 3   }
+  if (counts[0] === 2 && counts[1] === 2) return { name: 'TWO PAIR',        multiplier: 2   }
 
-  // Jacks or better
   if (counts[0] === 2) {
     const pair = Object.entries(rankCounts).find(([, c]) => c === 2)![0]
-    const highPairs = ['J','Q','K','A']
-    if (highPairs.includes(pair))          return { name: 'JACKS OR BETTER', multiplier: 1 }
+    if (['J','Q','K','A'].includes(pair)) return { name: 'JACKS OR BETTER', multiplier: 1   }
   }
 
   return { name: 'NO HAND', multiplier: 0 }
@@ -80,10 +76,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'POKER IS CURRENTLY CLOSED' }, { status: 403 })
 
   const { data: profile } = await supabase
-    .from('profiles').select('caps_balance').eq('id', user.id).single()
+    .from('profiles').select('caps_balance, is_admin').eq('id', user.id).single()
   if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
-  // ── DEAL ──────────────────────────────────────────────
   if (action === 'deal') {
     if (!bet || bet < 10)
       return NextResponse.json({ error: 'MINIMUM BET IS 10 CAPS' }, { status: 400 })
@@ -105,7 +100,6 @@ export async function POST(request: Request) {
     })
   }
 
-  // ── DRAW ──────────────────────────────────────────────
   if (action === 'draw') {
     if (!hand || !deck || !held)
       return NextResponse.json({ error: 'Invalid state' }, { status: 400 })
@@ -117,30 +111,28 @@ export async function POST(request: Request) {
 
     const { name, multiplier } = evaluateHand(finalHand)
     const payout = bet * multiplier
-    const newBalance = profile.caps_balance + payout
+    let newBalance = profile.caps_balance + payout
     const outcome = multiplier > 0 ? 'win' : 'loss'
 
     await supabase.from('profiles').update({ caps_balance: newBalance }).eq('id', user.id)
     await supabase.from('transactions').insert({
-      user_id: user.id, game: 'poker',
-      type: outcome,
+      user_id: user.id, game: 'poker', type: outcome,
       amount: outcome === 'win' ? payout : bet,
       balance_after: newBalance
     })
     await supabase.from('game_sessions').insert({
-      user_id: user.id, game: 'poker', bet,
-      outcome, payout,
+      user_id: user.id, game: 'poker', bet, outcome, payout,
       state_snapshot: { finalHand, handName: name, multiplier }
     })
 
+    if (!profile.is_admin) newBalance = await applyBustProtection(supabase, user.id, newBalance)
+
     return NextResponse.json({
-      status: outcome,
-      hand: finalHand,
-      handName: name,
-      multiplier,
-      payout,
-      newBalance,
-      message: multiplier > 0 ? `${name} · ${payout.toLocaleString()} CAPS` : 'NO HAND — HOUSE WINS'
+      status: outcome, hand: finalHand, handName: name,
+      multiplier, payout, newBalance,
+      message: multiplier > 0
+        ? `${name} · ${payout.toLocaleString()} CAPS`
+        : 'NO HAND — HOUSE WINS'
     })
   }
 
