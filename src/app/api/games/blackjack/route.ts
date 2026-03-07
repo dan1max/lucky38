@@ -36,6 +36,7 @@ function handTotal(hand: string[]): number {
 }
 
 function isBust(hand: string[]): boolean { return handTotal(hand) > 21 }
+
 function isBlackjack(hand: string[]): boolean {
   return hand.length === 2 && handTotal(hand) === 21
 }
@@ -48,7 +49,6 @@ export async function POST(request: Request) {
   const body = await request.json()
   const { action, bet, state } = body
 
-  // Check game is open
   const { data: cfg } = await supabase.from('config').select('key, value')
   const config: Record<string, string> = {}
   cfg?.forEach((r: { key: string; value: string }) => { config[r.key] = r.value })
@@ -70,14 +70,12 @@ export async function POST(request: Request) {
     const playerHand = [deck.pop()!, deck.pop()!]
     const dealerHand = [deck.pop()!, deck.pop()!]
 
-    // Deduct bet immediately
     await supabase.from('profiles')
       .update({ caps_balance: profile.caps_balance - bet })
       .eq('id', user.id)
 
-    // Check for immediate blackjack
     if (isBlackjack(playerHand)) {
-      const payout = Math.floor(bet * 2.5) // bet back + 1.5x
+      const payout = Math.floor(bet * 2.5)
       await supabase.from('profiles')
         .update({ caps_balance: profile.caps_balance - bet + payout })
         .eq('id', user.id)
@@ -90,16 +88,22 @@ export async function POST(request: Request) {
         payout, state_snapshot: { playerHand, dealerHand }
       })
       return NextResponse.json({
-        status: 'blackjack', playerHand, dealerHand,
-        playerTotal: 21, dealerTotal: handTotal(dealerHand),
-        payout, newBalance: profile.caps_balance - bet + payout,
+        status: 'blackjack',
+        playerHand,
+        dealerHand,           // always return real hand
+        playerTotal: 21,
+        dealerTotal: handTotal(dealerHand),
+        payout,
+        newBalance: profile.caps_balance - bet + payout,
         message: 'BLACKJACK! YOU WIN!'
       })
     }
 
     return NextResponse.json({
-      status: 'playing', playerHand, dealerHand: [dealerHand[0], '??'],
-      deck: deck.slice(0, 20), // send partial deck
+      status: 'playing',
+      playerHand,
+      dealerHand,             // always return real hand — client masks it
+      deck: deck.slice(0, 20),
       playerTotal: handTotal(playerHand),
       dealerTotal: cardValue(dealerHand[0]),
       newBalance: profile.caps_balance - bet
@@ -124,17 +128,22 @@ export async function POST(request: Request) {
         state_snapshot: { playerHand: newPlayerHand, dealerHand }
       })
       return NextResponse.json({
-        status: 'bust', playerHand: newPlayerHand, dealerHand,
+        status: 'bust',
+        playerHand: newPlayerHand,
+        dealerHand,             // real hand
         playerTotal: handTotal(newPlayerHand),
         dealerTotal: handTotal(dealerHand),
-        newBalance, message: 'BUST! HOUSE WINS.'
+        newBalance,
+        message: 'BUST! HOUSE WINS.'
       })
     }
 
     return NextResponse.json({
-      status: 'playing', playerHand: newPlayerHand,
-      dealerHand: [dealerHand[0], '??'],
-      deck: newDeck, playerTotal: handTotal(newPlayerHand),
+      status: 'playing',
+      playerHand: newPlayerHand,
+      dealerHand,               // real hand — client masks it
+      deck: newDeck,
+      playerTotal: handTotal(newPlayerHand),
       dealerTotal: cardValue(dealerHand[0])
     })
   }
@@ -165,10 +174,13 @@ export async function POST(request: Request) {
           state_snapshot: { playerHand, dealerHand }
         })
         return NextResponse.json({
-          status: 'bust', playerHand, dealerHand,
+          status: 'bust',
+          playerHand,
+          dealerHand,           // real hand
           playerTotal: handTotal(playerHand),
           dealerTotal: handTotal(dealerHand),
-          newBalance, message: 'BUST! HOUSE WINS.'
+          newBalance,
+          message: 'BUST! HOUSE WINS.'
         })
       }
     }
@@ -215,8 +227,14 @@ export async function POST(request: Request) {
     })
 
     return NextResponse.json({
-      status: outcome, playerHand, dealerHand,
-      playerTotal, dealerTotal, payout, newBalance, message
+      status: outcome,
+      playerHand,
+      dealerHand,               // real full hand always
+      playerTotal,
+      dealerTotal,
+      payout,
+      newBalance,
+      message
     })
   }
 
