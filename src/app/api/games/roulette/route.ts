@@ -12,11 +12,12 @@ function spin(): number {
 type Bet = { type: string; value: string | number; amount: number }
 
 function resolveBet(bet: Bet, result: number): number {
-  const isRed = RED.includes(result)
+  const isRed   = RED.includes(result)
   const isGreen = result === 0
 
   switch (bet.type) {
-    case 'straight': return Number(bet.value) === result ? bet.amount * 35 : 0
+    // ✅ FIX: straight pays 35:1 → return 36× so net profit = 35×
+    case 'straight': return Number(bet.value) === result ? bet.amount * 36 : 0
     case 'red':      return isRed ? bet.amount * 2 : 0
     case 'black':    return !isRed && !isGreen ? bet.amount * 2 : 0
     case 'even':     return !isGreen && result % 2 === 0 ? bet.amount * 2 : 0
@@ -64,15 +65,17 @@ export async function POST(request: Request) {
   if (totalBet > profile.caps_balance)
     return NextResponse.json({ error: 'INSUFFICIENT CAPS' }, { status: 400 })
 
-  const result = spin()
+  const result      = spin()
   const totalPayout = bets.reduce((sum, b) => sum + resolveBet(b, result), 0)
-  let newBalance = profile.caps_balance - totalBet + totalPayout
-  const outcome = totalPayout > totalBet ? 'win' : totalPayout === totalBet ? 'push' : 'loss'
+  let newBalance    = profile.caps_balance - totalBet + totalPayout
+  const outcome     = totalPayout > totalBet ? 'win'
+                    : totalPayout === totalBet ? 'push'
+                    : 'loss'
 
   await supabase.from('profiles').update({ caps_balance: newBalance }).eq('id', user.id)
   await supabase.from('transactions').insert({
     user_id: user.id, game: 'roulette',
-    type: outcome === 'loss' ? 'loss' : 'win',
+    type:   outcome === 'loss' ? 'loss' : 'win',
     amount: outcome === 'loss' ? totalBet : totalPayout - totalBet,
     balance_after: newBalance
   })
