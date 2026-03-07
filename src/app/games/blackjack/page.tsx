@@ -9,6 +9,7 @@ type GameState = {
   status: 'idle' | 'playing' | 'win' | 'loss' | 'bust' | 'push' | 'blackjack'
   playerHand: string[]
   dealerHand: string[]
+  dealerHandReal: string[]
   deck: string[]
   playerTotal: number
   dealerTotal: number
@@ -18,8 +19,8 @@ type GameState = {
 }
 
 const INIT: GameState = {
-  status: 'idle', playerHand: [], dealerHand: [], deck: [],
-  playerTotal: 0, dealerTotal: 0, bet: 0, payout: 0, message: ''
+  status: 'idle', playerHand: [], dealerHand: [], dealerHandReal: [],
+  deck: [], playerTotal: 0, dealerTotal: 0, bet: 0, payout: 0, message: ''
 }
 
 function CardDisplay({ card }: { card: string }) {
@@ -27,7 +28,8 @@ function CardDisplay({ card }: { card: string }) {
   const isRed = card.endsWith('♥') || card.endsWith('♦')
   return (
     <div style={{
-      width: '60px', height: '90px', background: isHidden ? 'var(--gold-dim)' : 'var(--white)',
+      width: '60px', height: '90px',
+      background: isHidden ? 'var(--gold-dim)' : 'var(--white)',
       border: '2px solid var(--gold)', borderRadius: '6px',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: isHidden ? '1.5rem' : '1.2rem', fontWeight: 'bold',
@@ -80,16 +82,20 @@ export default function BlackjackPage() {
     const data = await callAPI('deal', { bet })
     if (!data) return
     setBalance(data.newBalance)
-    setGame({ ...data, bet, deck: data.deck || [] })
+    setGame({
+      ...data,
+      bet,
+      deck: data.deck || [],
+      dealerHandReal: data.dealerHand,
+      dealerHand: [data.dealerHand[0], '??'],
+    })
   }
 
   async function handleAction(action: 'hit' | 'stand' | 'double') {
     const data = await callAPI(action, {
       state: {
         playerHand: game.playerHand,
-        dealerHand: action === 'hit'
-          ? [...game.dealerHand.slice(0, 1), game.dealerHand[1]]
-          : game.dealerHand,
+        dealerHand: game.dealerHandReal,
         deck: game.deck,
         bet: game.bet
       }
@@ -99,12 +105,16 @@ export default function BlackjackPage() {
     setGame(prev => ({
       ...prev, ...data,
       bet: action === 'double' ? prev.bet * 2 : prev.bet,
-      deck: data.deck || prev.deck
+      deck: data.deck || prev.deck,
+      dealerHandReal: data.dealerHand,
+      dealerHand: data.status === 'playing'
+        ? [data.dealerHand[0], '??']
+        : data.dealerHand,
     }))
   }
 
   const isPlaying = game.status === 'playing'
-  const isOver = ['win','loss','bust','push','blackjack'].includes(game.status)
+  const isOver = ['win', 'loss', 'bust', 'push', 'blackjack'].includes(game.status)
   const statusColor = {
     win: 'var(--gold)', blackjack: 'var(--gold-bright)',
     loss: 'var(--red-bright)', bust: 'var(--red-bright)',
@@ -142,7 +152,9 @@ export default function BlackjackPage() {
           <div>
             <p style={{ color: 'var(--gold-dim)', fontSize: '0.7rem', letterSpacing: '0.2em',
               marginBottom: '0.75rem' }}>
-              DEALER — {game.status === 'playing' ? `SHOWING ${game.dealerTotal}` : `TOTAL: ${game.dealerTotal}`}
+              DEALER — {game.status === 'playing'
+                ? `SHOWING ${game.dealerTotal}`
+                : game.dealerTotal ? `TOTAL: ${game.dealerTotal}` : ''}
             </p>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               {game.dealerHand.length > 0
@@ -159,7 +171,7 @@ export default function BlackjackPage() {
               </p>
               {isOver && game.payout > 0 && (
                 <p style={{ color: 'var(--gold-dim)', fontSize: '0.8rem', marginTop: '0.3rem' }}>
-                  PAYOUT: {game.payout} CAPS
+                  PAYOUT: {game.payout.toLocaleString()} CAPS
                 </p>
               )}
             </div>
