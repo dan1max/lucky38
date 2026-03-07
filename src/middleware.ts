@@ -24,7 +24,8 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const { pathname } = request.nextUrl
 
-  const protectedPaths = ['/lobby', '/games', '/profile', '/leaderboard', '/admin']
+  // Leaderboard is public — all others require auth
+  const protectedPaths = ['/lobby', '/games', '/profile', '/admin']
   const isProtected = protectedPaths.some(p => pathname.startsWith(p))
 
   if (isProtected && !user)
