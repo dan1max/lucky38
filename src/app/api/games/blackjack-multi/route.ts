@@ -128,11 +128,10 @@ async function cleanupUserSeats(userId: string) {
     .eq('user_id', userId)
 
   for (const s of (userSeats || [])) {
-    const tableStatus = (s.blackjack_tables as { status: string } | null)?.status
-    // Solo limpiar si NO está en ronda activa
+    // ✅ FIX: cast as array (Supabase returns joined rows as array)
+    const tableStatus = (s.blackjack_tables as { status: string }[] | null)?.[0]?.status
     if (!['betting', 'playing', 'dealer_turn'].includes(tableStatus ?? '')) {
       await supabaseAdmin.from('blackjack_seats').delete().eq('id', s.id)
-      // Si la mesa queda vacía, eliminarla
       const { data: rem } = await supabaseAdmin
         .from('blackjack_seats').select('id').eq('table_id', s.table_id)
       if (!rem || rem.length === 0)
@@ -161,10 +160,8 @@ export async function POST(request: Request) {
 
   // ── JOIN ────────────────────────────────────────────────────────
   if (action === 'join') {
-    // Limpiar seats huérfanos antes de buscar mesa
     await cleanupUserSeats(user.id)
 
-    // Ver si ya está en una ronda activa
     const { data: existing } = await supabaseAdmin
       .from('blackjack_seats')
       .select('table_id, id, blackjack_tables(status)')
@@ -175,7 +172,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ tableId: existing.table_id, seatId: existing.id })
     }
 
-    // Buscar mesa con hueco
     let tableId: string | null = null
     const { data: tables } = await supabaseAdmin
       .from('blackjack_tables').select('id, status, blackjack_seats(count)')
@@ -209,10 +205,8 @@ export async function POST(request: Request) {
   // ── LEAVE ───────────────────────────────────────────────────────
   if (action === 'leave') {
     const { tableId } = body
-    if (!tableId) return NextResponse.json({ ok: true }) // sendBeacon sin tableId, ignorar
+    if (!tableId) return NextResponse.json({ ok: true })
 
-    // FIX: maybeSingle() en lugar de single() — el seat puede no existir
-    // (doble disparo de sendBeacon + handleLeave, o seat ya eliminado)
     const { data: seat } = await supabaseAdmin
       .from('blackjack_seats')
       .select('status')
@@ -220,17 +214,14 @@ export async function POST(request: Request) {
       .eq('user_id', user.id)
       .maybeSingle()
 
-    // Si no existe el seat, no hay nada que limpiar
     if (!seat) return NextResponse.json({ ok: true })
 
-    // No permitir salir si está en medio de una ronda activa
     if (seat.status === 'playing')
       return NextResponse.json({ error: 'Cannot leave mid-round' }, { status: 400 })
 
     await supabaseAdmin.from('blackjack_seats').delete()
       .eq('table_id', tableId).eq('user_id', user.id)
 
-    // Si la mesa queda vacía, eliminarla
     const { data: rem } = await supabaseAdmin
       .from('blackjack_seats').select('id').eq('table_id', tableId)
     if (!rem || rem.length === 0)
