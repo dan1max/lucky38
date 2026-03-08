@@ -90,7 +90,6 @@ function outcomeLabel(seat: Seat, tableStatus: TableStatus): string {
 
 export default function BlackjackMultiPage() {
   const [tableId, setTableId] = useState<string | null>(null)
-  const [seatId, setSeatId] = useState<string | null>(null)
   const [tableData, setTableData] = useState<TableData | null>(null)
   const [seats, setSeats] = useState<Seat[]>([])
   const [userId, setUserId] = useState<string | null>(null)
@@ -110,6 +109,7 @@ export default function BlackjackMultiPage() {
     return res.json()
   }, [])
 
+  // Init: auth + join table
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -124,12 +124,25 @@ export default function BlackjackMultiPage() {
       if (data.error) { setError(data.error); setJoining(false); return }
 
       setTableId(data.tableId)
-      setSeatId(data.seatId)
       setJoining(false)
     }
     init()
   }, [])
 
+  // Cleanup al cerrar pestaña o navegar sin pulsar LEAVE
+  useEffect(() => {
+    return () => {
+      if (tableId) {
+        navigator.sendBeacon(
+          '/api/games/blackjack-multi',
+          new Blob([JSON.stringify({ action: 'leave', tableId })],
+            { type: 'application/json' })
+        )
+      }
+    }
+  }, [tableId])
+
+  // Fetch table + seats
   const fetchTable = useCallback(async (tid: string) => {
     const [{ data: t }, { data: s }] = await Promise.all([
       supabase.from('blackjack_tables').select('*').eq('id', tid).single(),
@@ -139,6 +152,7 @@ export default function BlackjackMultiPage() {
     if (s) setSeats(s as Seat[])
   }, [supabase])
 
+  // Realtime: table + seats
   useEffect(() => {
     if (!tableId) return
     fetchTable(tableId)
@@ -153,11 +167,14 @@ export default function BlackjackMultiPage() {
     return () => { supabase.removeChannel(ch) }
   }, [tableId, fetchTable])
 
+  // Realtime: balance
   useEffect(() => {
     if (!userId) return
     const ch = supabase.channel(`balance-${userId}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles',
-        filter: `id=eq.${userId}` }, (payload: { new: { caps_balance: number } }) => {
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'profiles',
+        filter: `id=eq.${userId}`
+      }, (payload: { new: { caps_balance: number } }) => {
         setBalance(payload.new.caps_balance)
       }).subscribe()
     return () => { supabase.removeChannel(ch) }
@@ -196,7 +213,7 @@ export default function BlackjackMultiPage() {
   }
 
   async function handleLeave() {
-    await api({ action: 'leave', tableId })
+    if (tableId) await api({ action: 'leave', tableId })
     router.push('/lobby')
   }
 
@@ -409,8 +426,7 @@ export default function BlackjackMultiPage() {
 
             {/* Playing phase */}
             {tableStatus === 'playing' && (
-              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap',
-                alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
                 {isMyTurn ? (
                   <>
                     <p style={{ color: 'var(--gold-bright)', fontSize: '0.8rem',

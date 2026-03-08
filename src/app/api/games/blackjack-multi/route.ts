@@ -92,7 +92,7 @@ async function dealerPlay(tableId: string) {
     if (seat.status === 'bust') {
       payout = 0
     } else if (seat.status === 'blackjack') {
-      if (dealerTotal === 21 && dealerHand.length === 2) payout = seat.bet // push
+      if (dealerTotal === 21 && dealerHand.length === 2) payout = seat.bet
       else payout = Math.floor(seat.bet * 2.5)
     } else if (dealerBust || playerTotal > dealerTotal) {
       payout = seat.bet * 2
@@ -121,6 +121,26 @@ async function dealerPlay(tableId: string) {
   }).eq('id', tableId)
 }
 
+async function cleanupUserSeats(userId: string) {
+  const { data: userSeats } = await supabaseAdmin
+    .from('blackjack_seats')
+    .select('id, table_id, blackjack_tables(status)')
+    .eq('user_id', userId)
+
+  for (const s of (userSeats || [])) {
+    const tableStatus = (s.blackjack_tables as { status: string } | null)?.status
+    // Solo limpiar si NO está en ronda activa
+    if (!['betting', 'playing', 'dealer_turn'].includes(tableStatus ?? '')) {
+      await supabaseAdmin.from('blackjack_seats').delete().eq('id', s.id)
+      // Si la mesa queda vacía, eliminarla
+      const { data: rem } = await supabaseAdmin
+        .from('blackjack_seats').select('id').eq('table_id', s.table_id)
+      if (!rem || rem.length === 0)
+        await supabaseAdmin.from('blackjack_tables').delete().eq('id', s.table_id)
+    }
+  }
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -141,16 +161,25 @@ export async function POST(request: Request) {
 
   // ── JOIN ────────────────────────────────────────────────────────
   if (action === 'join') {
-    const { data: existing } = await supabaseAdmin
-      .from('blackjack_seats').select('table_id, id').eq('user_id', user.id)
-      .not('status', 'eq', 'left').maybeSingle()
-    if (existing) return NextResponse.json({ tableId: existing.table_id, seatId: existing.id })
+    // Limpiar seats huérfanos antes de buscar mesa
+    await cleanupUserSeats(user.id)
 
-    // Find open table
+    // Ver si ya está en una ronda activa
+    const { data: existing } = await supabaseAdmin
+      .from('blackjack_seats')
+      .select('table_id, id, blackjack_tables(status)')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (existing) {
+      return NextResponse.json({ tableId: existing.table_id, seatId: existing.id })
+    }
+
+    // Buscar mesa con hueco
     let tableId: string | null = null
     const { data: tables } = await supabaseAdmin
       .from('blackjack_tables').select('id, status, blackjack_seats(count)')
-      .in('status', ['waiting','finished']).order('created_at')
+      .in('status', ['waiting','betting']).order('created_at')
 
     for (const t of (tables || [])) {
       const count = (t.blackjack_seats as { count: number }[])?.[0]?.count ?? 0
@@ -161,18 +190,6 @@ export async function POST(request: Request) {
       const { data: nt } = await supabaseAdmin
         .from('blackjack_tables').insert({ status: 'waiting' }).select().single()
       tableId = nt!.id
-    } else {
-      // Reset finished table if joining
-      const t = tables?.find(t => t.id === tableId)
-      if (t?.status === 'finished') {
-        await supabaseAdmin.from('blackjack_tables').update({
-          status: 'waiting', dealer_hand: [], dealer_hand_real: [], deck: [],
-          updated_at: new Date().toISOString()
-        }).eq('id', tableId)
-        await supabaseAdmin.from('blackjack_seats').update({
-          status: 'idle', hand: [], bet: 0, payout: 0
-        }).eq('table_id', tableId)
-      }
     }
 
     const { data: taken } = await supabaseAdmin
@@ -192,14 +209,28 @@ export async function POST(request: Request) {
   // ── LEAVE ───────────────────────────────────────────────────────
   if (action === 'leave') {
     const { tableId } = body
+    if (!tableId) return NextResponse.json({ ok: true }) // sendBeacon sin tableId, ignorar
+
+    // FIX: maybeSingle() en lugar de single() — el seat puede no existir
+    // (doble disparo de sendBeacon + handleLeave, o seat ya eliminado)
     const { data: seat } = await supabaseAdmin
-      .from('blackjack_seats').select('status').eq('table_id', tableId).eq('user_id', user.id).single()
-    if (seat?.status === 'playing')
+      .from('blackjack_seats')
+      .select('status')
+      .eq('table_id', tableId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    // Si no existe el seat, no hay nada que limpiar
+    if (!seat) return NextResponse.json({ ok: true })
+
+    // No permitir salir si está en medio de una ronda activa
+    if (seat.status === 'playing')
       return NextResponse.json({ error: 'Cannot leave mid-round' }, { status: 400 })
 
     await supabaseAdmin.from('blackjack_seats').delete()
       .eq('table_id', tableId).eq('user_id', user.id)
 
+    // Si la mesa queda vacía, eliminarla
     const { data: rem } = await supabaseAdmin
       .from('blackjack_seats').select('id').eq('table_id', tableId)
     if (!rem || rem.length === 0)
@@ -265,7 +296,6 @@ export async function POST(request: Request) {
       }).eq('id', seat.id)
     }
 
-    // Update deck after dealing all cards
     await supabaseAdmin.from('blackjack_tables').update({ deck }).eq('id', tableId)
 
     if (allBJ) await dealerPlay(tableId)
