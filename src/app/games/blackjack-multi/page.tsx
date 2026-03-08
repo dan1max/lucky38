@@ -130,7 +130,6 @@ export default function BlackjackMultiPage() {
     init()
   }, [])
 
-  // Fetch table + seats
   const fetchTable = useCallback(async (tid: string) => {
     const [{ data: t }, { data: s }] = await Promise.all([
       supabase.from('blackjack_tables').select('*').eq('id', tid).single(),
@@ -138,7 +137,7 @@ export default function BlackjackMultiPage() {
     ])
     if (t) setTableData(t as TableData)
     if (s) setSeats(s as Seat[])
-  }, [])
+  }, [supabase])
 
   useEffect(() => {
     if (!tableId) return
@@ -154,7 +153,6 @@ export default function BlackjackMultiPage() {
     return () => { supabase.removeChannel(ch) }
   }, [tableId, fetchTable])
 
-  // Also refresh balance when seats change (payouts)
   useEffect(() => {
     if (!userId) return
     const ch = supabase.channel(`balance-${userId}`)
@@ -264,14 +262,14 @@ export default function BlackjackMultiPage() {
           <div style={{ textAlign: 'center', marginBottom: '0.75rem' }}>
             <span style={{
               fontSize: '0.7rem', letterSpacing: '0.25em', padding: '0.3rem 0.75rem',
-              border: `1px solid ${tableStatus === 'playing' || tableStatus === 'dealer_turn' ? '#44aaff' : 'var(--gold-dim)'}`,
-              color: tableStatus === 'playing' || tableStatus === 'dealer_turn' ? '#44aaff' : 'var(--gold-dim)',
+              border: `1px solid ${['playing','dealer_turn'].includes(tableStatus) ? '#44aaff' : 'var(--gold-dim)'}`,
+              color: ['playing','dealer_turn'].includes(tableStatus) ? '#44aaff' : 'var(--gold-dim)',
             }}>
-              {tableStatus === 'waiting' && '● WAITING FOR PLAYERS'}
-              {tableStatus === 'betting' && '● PLACE YOUR BETS'}
-              {tableStatus === 'playing' && '● ROUND IN PROGRESS'}
+              {tableStatus === 'waiting'     && '● WAITING FOR PLAYERS'}
+              {tableStatus === 'betting'     && '● PLACE YOUR BETS'}
+              {tableStatus === 'playing'     && '● ROUND IN PROGRESS'}
               {tableStatus === 'dealer_turn' && '● DEALER PLAYING'}
-              {tableStatus === 'finished' && '● ROUND COMPLETE'}
+              {tableStatus === 'finished'    && '● ROUND COMPLETE'}
             </span>
           </div>
 
@@ -437,10 +435,10 @@ export default function BlackjackMultiPage() {
                 ) : (
                   <p style={{ color: 'var(--gold-dim)', fontSize: '0.8rem',
                     letterSpacing: '0.2em', flex: 1, textAlign: 'center' }}>
-                    {mySeat?.status === 'bust' ? '💥 BUST — WAITING FOR OTHERS'
-                      : mySeat?.status === 'standing' ? '✓ STANDING — WAITING FOR OTHERS'
+                    {mySeat?.status === 'bust'      ? '💥 BUST — WAITING FOR OTHERS'
+                      : mySeat?.status === 'standing'  ? '✓ STANDING — WAITING FOR OTHERS'
                       : mySeat?.status === 'blackjack' ? '🃏 BLACKJACK! WAITING FOR OTHERS'
-                      : mySeat?.status === 'idle' ? 'SPECTATING THIS ROUND'
+                      : mySeat?.status === 'idle'      ? 'SPECTATING THIS ROUND'
                       : 'WAITING...'}
                   </p>
                 )}

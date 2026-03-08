@@ -18,33 +18,28 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
 
+  async function fetchLeaderboard() {
+    const { data } = await supabase
+      .from('leaderboard')
+      .select('*')
+      .order('rank', { ascending: true })
+    if (data) setEntries(data)
+  }
+
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) setCurrentUserId(user.id)
-
-      const { data } = await supabase
-        .from('leaderboard')
-        .select('*')
-        .order('rank', { ascending: true })
-
-      if (data) setEntries(data)
+      await fetchLeaderboard()
       setLoading(false)
     }
     load()
 
-    // Realtime updates
     const channel = supabase
-      .channel('leaderboard-realtime')
+      .channel('leaderboard-watch')
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'profiles'
-      }, async () => {
-        const { data } = await supabase
-          .from('leaderboard')
-          .select('*')
-          .order('rank', { ascending: true })
-        if (data) setEntries(data)
-      })
+      }, () => fetchLeaderboard())
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
@@ -72,21 +67,11 @@ export default function LeaderboardPage() {
               TOP CAPS HOLDERS · LUCKY 38
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            {currentUserId ? (
-              <Link href="/lobby">
-                <button className="btn" style={{ padding: '0.4rem 1rem', fontSize: '0.75rem' }}>
-                  ← LOBBY
-                </button>
-              </Link>
-            ) : (
-              <Link href="/">
-                <button className="btn" style={{ padding: '0.4rem 1rem', fontSize: '0.75rem' }}>
-                  ← HOME
-                </button>
-              </Link>
-            )}
-          </div>
+          <Link href={currentUserId ? '/lobby' : '/'}>
+            <button className="btn" style={{ padding: '0.4rem 1rem', fontSize: '0.75rem' }}>
+              ← {currentUserId ? 'LOBBY' : 'HOME'}
+            </button>
+          </Link>
         </div>
 
         <div className="divider" style={{ marginBottom: '2rem' }}>
@@ -111,12 +96,12 @@ export default function LeaderboardPage() {
                   padding: '1rem 1.5rem',
                   borderColor: isMe ? 'var(--gold)' : 'var(--gold-dim)',
                   background: isMe ? 'rgba(201,168,76,0.05)' : 'var(--black-soft)',
+                  transition: 'all 0.3s',
                 }}>
                   <span style={{
                     fontSize: entry.rank <= 3 ? '1.5rem' : '1rem',
                     color: medalColor(entry.rank),
-                    minWidth: '2.5rem',
-                    textAlign: 'center',
+                    minWidth: '2.5rem', textAlign: 'center',
                     fontFamily: 'VT323, monospace',
                   }}>
                     {entry.rank <= 3 ? ['🥇','🥈','🥉'][entry.rank - 1] : `#${entry.rank}`}
@@ -130,9 +115,7 @@ export default function LeaderboardPage() {
                       {entry.username}
                       {isMe && (
                         <span style={{ color: 'var(--gold-dim)', fontSize: '0.7rem',
-                          marginLeft: '0.5rem' }}>
-                          (YOU)
-                        </span>
+                          marginLeft: '0.5rem' }}>(YOU)</span>
                       )}
                     </span>
                   </div>
@@ -154,7 +137,6 @@ export default function LeaderboardPage() {
           fontSize: '0.7rem', letterSpacing: '0.15em', marginTop: '2rem' }}>
           UPDATES IN REAL TIME · MR. HOUSE IS WATCHING
         </p>
-
       </div>
 
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: '4px',
