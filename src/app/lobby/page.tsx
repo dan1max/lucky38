@@ -13,10 +13,11 @@ type Profile = {
 }
 
 const GAMES = [
-  { id: 'blackjack', label: 'BLACKJACK',   desc: 'Beat the dealer. 1.5x on blackjack.', icon: '🃏', configKey: 'blackjack_open' },
-  { id: 'roulette',  label: 'ROULETTE',    desc: 'European single zero. Place your bets.', icon: '🎡', configKey: 'roulette_open' },
-  { id: 'slots',     label: 'SLOTS',       desc: 'Three reels. Weighted symbols.', icon: '🎰', configKey: 'slots_open' },
-  { id: 'poker',     label: 'VIDEO POKER', desc: '5-card draw. Jacks or better.', icon: '♠️', configKey: 'poker_open' },
+  { id: 'blackjack',       label: 'BLACKJACK',        desc: 'Beat the dealer. 1.5x on blackjack.',        icon: '🃏', configKey: 'blackjack_open' },
+  { id: 'blackjack-multi', label: 'BLACKJACK MULTI',  desc: 'Same dealer, up to 6 players at once.',      icon: '🎴', configKey: 'blackjack_open' },
+  { id: 'roulette',        label: 'ROULETTE',          desc: 'European single zero. Place your bets.',      icon: '🎡', configKey: 'roulette_open' },
+  { id: 'slots',           label: 'SLOTS',             desc: 'Three reels. Weighted symbols.',              icon: '🎰', configKey: 'slots_open' },
+  { id: 'poker',           label: 'VIDEO POKER',       desc: '5-card draw. Jacks or better.',              icon: '♠️', configKey: 'poker_open' },
 ]
 
 export default function LobbyPage() {
