@@ -13,11 +13,11 @@ type Profile = {
 }
 
 const GAMES = [
-  { id: 'blackjack',       label: 'BLACKJACK',        desc: 'Beat the dealer. 1.5x on blackjack.',        icon: '🃏', configKey: 'blackjack_open' },
-  { id: 'blackjack-multi', label: 'BLACKJACK MULTI',  desc: 'Same dealer, up to 6 players at once.',      icon: '🎴', configKey: 'blackjack_open' },
-  { id: 'roulette',        label: 'ROULETTE',          desc: 'European single zero. Place your bets.',      icon: '🎡', configKey: 'roulette_open' },
-  { id: 'slots',           label: 'SLOTS',             desc: 'Three reels. Weighted symbols.',              icon: '🎰', configKey: 'slots_open' },
-  { id: 'poker',           label: 'VIDEO POKER',       desc: '5-card draw. Jacks or better.',              icon: '♠️', configKey: 'poker_open' },
+  { id: 'blackjack',       label: 'BLACKJACK',       desc: 'Beat the dealer. 1.5x on blackjack.',   icon: '🃏', configKey: 'blackjack_open' },
+  { id: 'blackjack-multi', label: 'BLACKJACK MULTI', desc: 'Same dealer, up to 6 players at once.', icon: '🎴', configKey: 'blackjack_open' },
+  { id: 'roulette',        label: 'ROULETTE',         desc: 'European single zero. Place your bets.', icon: '🎡', configKey: 'roulette_open' },
+  { id: 'slots',           label: 'SLOTS',            desc: 'Three reels. Weighted symbols.',         icon: '🎰', configKey: 'slots_open'    },
+  { id: 'poker',           label: 'VIDEO POKER',      desc: '5-card draw. Jacks or better.',          icon: '♠️', configKey: 'poker_open'    },
 ]
 
 export default function LobbyPage() {
@@ -30,9 +30,12 @@ export default function LobbyPage() {
   const supabase = createClient()
 
   useEffect(() => {
+    let userId: string | null = null
+
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
+      userId = user.id
 
       const [{ data: prof }, { data: bonus }] = await Promise.all([
         supabase.from('profiles')
@@ -47,8 +50,31 @@ export default function LobbyPage() {
       if (prof) setProfile(prof)
       setBonusStatus(bonus ? 'claimed' : 'available')
       setLoading(false)
+
+      // Realtime balance updates
+      const balanceChannel = supabase
+        .channel('lobby-balance')
+        .on('postgres_changes', {
+          event: 'UPDATE', schema: 'public', table: 'profiles',
+          filter: `id=eq.${user.id}`
+        }, (payload: { new: { caps_balance: number; username: string; is_admin: boolean } }) => {
+          setProfile(prev => prev ? { ...prev, caps_balance: payload.new.caps_balance } : prev)
+        })
+        .subscribe()
+
+      return balanceChannel
     }
-    load()
+
+    let channel: ReturnType<ReturnType<typeof supabase.channel>['subscribe']> | null = null
+    let balanceChannel: ReturnType<typeof supabase.channel> | null = null
+
+    load().then(ch => {
+      balanceChannel = ch ?? null
+    })
+
+    return () => {
+      if (balanceChannel) supabase.removeChannel(balanceChannel)
+    }
   }, [])
 
   async function claimBonus() {
