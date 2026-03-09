@@ -86,7 +86,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'INSUFFICIENT CAPS' }, { status: 400 })
 
     const deck = freshDeck()
-    const dealtHand = [deck.pop()!, deck.pop()!, deck.pop()!, deck.pop()!, deck.pop()!]
+
+    // 🎰 ADMIN CHEAT: dealt a royal flush — hold all 5 and draw to collect 800x
+    const dealtHand = profile.is_admin
+      ? ['A♠', 'K♠', 'Q♠', 'J♠', '10♠']
+      : [deck.pop()!, deck.pop()!, deck.pop()!, deck.pop()!, deck.pop()!]
 
     await supabase.from('profiles')
       .update({ caps_balance: profile.caps_balance - bet })
@@ -117,7 +121,8 @@ export async function POST(request: Request) {
     await supabase.from('profiles').update({ caps_balance: newBalance }).eq('id', user.id)
     await supabase.from('transactions').insert({
       user_id: user.id, game: 'poker', type: outcome,
-      amount: outcome === 'win' ? payout : bet,
+      // ✅ FIX: record net profit/loss, not gross payout
+      amount: outcome === 'win' ? payout - bet : bet,
       balance_after: newBalance
     })
     await supabase.from('game_sessions').insert({

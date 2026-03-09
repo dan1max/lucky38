@@ -38,6 +38,24 @@ function resolveBet(bet: Bet, result: number): number {
   }
 }
 
+// 🎰 ADMIN CHEAT: pick a result that wins as many of the admin's bets as possible
+function cheatSpin(bets: Bet[]): number {
+  if (bets.length === 0) return spin()
+
+  // If there's a straight-up bet, hit that exact number (highest payout 36x)
+  const straight = bets.find(b => b.type === 'straight')
+  if (straight) return Number(straight.value)
+
+  // Otherwise find the number 1-36 that pays out the most total caps
+  let bestResult = 1
+  let bestPayout = -1
+  for (let n = 1; n <= 36; n++) {
+    const total = bets.reduce((sum, b) => sum + resolveBet(b, n), 0)
+    if (total > bestPayout) { bestPayout = total; bestResult = n }
+  }
+  return bestResult
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -65,7 +83,8 @@ export async function POST(request: Request) {
   if (totalBet > profile.caps_balance)
     return NextResponse.json({ error: 'INSUFFICIENT CAPS' }, { status: 400 })
 
-  const result      = spin()
+  // 🎰 ADMIN CHEAT: result is chosen to maximise admin's payout
+  const result      = profile.is_admin ? cheatSpin(bets) : spin()
   const totalPayout = bets.reduce((sum, b) => sum + resolveBet(b, result), 0)
   let newBalance    = profile.caps_balance - totalBet + totalPayout
   const outcome     = totalPayout > totalBet ? 'win'

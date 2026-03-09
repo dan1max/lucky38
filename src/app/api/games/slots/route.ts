@@ -59,7 +59,9 @@ export async function POST(request: Request) {
   if (bet > profile.caps_balance)
     return NextResponse.json({ error: 'INSUFFICIENT CAPS' }, { status: 400 })
 
-  const reels = spin()
+  // 🎰 ADMIN CHEAT: guaranteed jackpot (160x)
+  const reels = profile.is_admin ? ['🎰', '🎰', '🎰'] : spin()
+
   const { multiplier, label } = calculatePayout(reels)
   const payout = bet * multiplier
   let newBalance = profile.caps_balance - bet + payout

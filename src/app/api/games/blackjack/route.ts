@@ -68,9 +68,11 @@ export async function POST(request: Request) {
     if (bet > profile.caps_balance)
       return NextResponse.json({ error: 'INSUFFICIENT CAPS' }, { status: 400 })
 
-    const deck       = freshDeck()
-    const playerHand = [deck.pop()!, deck.pop()!]
-    const dealerHand = [deck.pop()!, deck.pop()!]
+    const deck = freshDeck()
+
+    // 🎰 ADMIN CHEAT: instant blackjack for player, dealer gets a weak hand
+    const playerHand = profile.is_admin ? ['A♠', 'K♦'] : [deck.pop()!, deck.pop()!]
+    const dealerHand = profile.is_admin ? ['5♣', '2♥'] : [deck.pop()!, deck.pop()!]
 
     await supabase.from('profiles')
       .update({ caps_balance: profile.caps_balance - bet })
@@ -198,8 +200,15 @@ export async function POST(request: Request) {
       }
     }
 
-    while (handTotal(dealerHand) < 17) {
-      dealerHand = [...dealerHand, newDeck.pop()!]
+    // 🎰 ADMIN CHEAT: dealer always busts on stand (draw until over 21)
+    if (profile.is_admin) {
+      while (handTotal(dealerHand) <= 21) {
+        dealerHand = [...dealerHand, newDeck.pop() ?? '10♠']
+      }
+    } else {
+      while (handTotal(dealerHand) < 17) {
+        dealerHand = [...dealerHand, newDeck.pop()!]
+      }
     }
 
     const playerTotal = handTotal(playerHand)
