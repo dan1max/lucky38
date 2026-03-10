@@ -121,8 +121,9 @@ export async function POST(request: Request) {
     await supabase.from('profiles').update({ caps_balance: newBalance }).eq('id', user.id)
     await supabase.from('transactions').insert({
       user_id: user.id, game: 'poker', type: outcome,
-      // ✅ FIX: record net profit/loss, not gross payout
-      amount: outcome === 'win' ? payout - bet : bet,
+      // Win: guarda el payout bruto (lo que recibes). Jacks or Better = bet, Royal Flush = 800×bet
+      // Loss: guarda el bet (lo que pierdes)
+      amount: outcome === 'win' ? payout : bet,
       balance_after: newBalance
     })
     await supabase.from('game_sessions').insert({
